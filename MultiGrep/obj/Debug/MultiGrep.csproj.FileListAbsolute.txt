@@ -1,0 +1,6 @@
+Z:\MultiGrep\MultiGrep\bin\Debug\MultiGrep.exe.config
+Z:\MultiGrep\MultiGrep\bin\Debug\MultiGrep.exe
+Z:\MultiGrep\MultiGrep\bin\Debug\MultiGrep.pdb
+Z:\MultiGrep\MultiGrep\obj\Debug\MultiGrep.csprojResolveAssemblyReference.cache
+Z:\MultiGrep\MultiGrep\obj\Debug\MultiGrep.exe
+Z:\MultiGrep\MultiGrep\obj\Debug\MultiGrep.pdb
