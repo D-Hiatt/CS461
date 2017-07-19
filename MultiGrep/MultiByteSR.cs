@@ -32,21 +32,32 @@ using System.Threading.Tasks;
 
 namespace MultiGrep
 {
-    public class MultiByteSR
+    public static class MultiByteSR
     {
-        private static readonly byte[] LocalConst = Encoding.Default.GetBytes("LocalizedMessage(");
-        private static readonly byte[] Comment = Encoding.Default.GetBytes("  //");
-        private static readonly string Temp = Path.Combine(Path.GetTempPath(), "LocalizedData");
-        private static readonly string m_Path = "";
-        public static char Grouping = '"';
+        /// <summary>
+        /// A list containing all possible pattern replacements
+        /// </summary>
         private static readonly List<string> m_Replacements = new List<string>();
         public static readonly string TreeSave = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tree.bin");
 
-        private static readonly BlockingCollection<Tuple<string, List<Translation>>> Replacer =
-            new BlockingCollection<Tuple<string, List<Translation>>>(new ConcurrentBag<Tuple<string, List<Translation>>>());
+        /// <summary>
+        /// Work queue containing files and their respective matches to be written.
+        /// </summary>
+        private static readonly BlockingCollection<Tuple<string, List<Bookmark>>> Replacer =
+            new BlockingCollection<Tuple<string, List<Bookmark>>>(new ConcurrentBag<Tuple<string, List<Bookmark>>>());
 
-        public static ByteTree Tree { get; private set; }
-        public static List<byte[]> Ignore { get;  } = new List<byte[]>();
+
+        public static Trie Tree { get; private set; }
+
+        /// <summary>
+        /// Determines whether files are directly written to or a backup copy is made.
+        /// </summary>
+        public static bool Backup { get; set; }
+
+        /// <summary>
+        /// The identifier surrounding each pattern and replacement
+        /// </summary>
+        public static char Grouping { get; set; } = '"';
 
 
         /// <summary>
@@ -69,20 +80,16 @@ namespace MultiGrep
             if(fn == TreeSave || fn.EndsWith(".bin", StringComparison.OrdinalIgnoreCase))
             {
                 //Load the tree from a saved file
-                Tree = new ByteTree(new BinaryReader(new FileStream(fn, FileMode.Open, FileAccess.Read, FileShare.Read)));
+                Tree = new Trie(new BinaryReader(new FileStream(fn, FileMode.Open, FileAccess.Read, FileShare.Read)));
             }
             else
             {
-                ConcurrentDictionary<string, HashSet<int>> dict1 = new ConcurrentDictionary<string, HashSet<int>>();
+              //  ConcurrentDictionary<string, HashSet<int>> dict1 = new ConcurrentDictionary<string, HashSet<int>>();
                 //Otherwise build a new suffix tree
-                ReadData(fn, (n, s) => dict1.AddOrUpdate(s, new HashSet<int> {n}, (k, v) =>
-                {
-                    v.Add(n);
-                    return v;
-                }));
-                HashSet<int> del;
-                dict1.TryRemove("", out del);//Remove any blank strings
-                Tree = new ByteTree(dict1);
+              //  ;
+               // HashSet<int> del;
+               // dict1.TryRemove("", out del);//Remove any blank strings
+                Tree = new Trie(ReadData(fn));
             }
             return Tree != null;
         }
@@ -95,7 +102,7 @@ namespace MultiGrep
         }
 
         /// <summary>
-        /// Saves the <see cref="SuffixTree"/>.  Useful when loading large pattern files, to avoid rebuilding the tree each time.
+        /// Saves the <see cref="Trie"/>.  Useful when loading large pattern files, to avoid rebuilding the tree each time.
         /// </summary>
         /// <param name="fn"></param>
         public static void Save(string fn)
@@ -107,31 +114,40 @@ namespace MultiGrep
         /// <summary>
         /// Read the list of patterns and replacement patterns
         /// </summary>
-        /// <param name="fn"></param>
-        /// <param name="action"></param>
-        public static void ReadData(string fn, Action<int, string> action)
+        /// <param name="fn">A filename containing patterns and replacements</param>
+        private static IEnumerable<Tuple<byte[], int>> ReadData(string fn)
         {
             if(!File.Exists(fn))
             {
                 Console.WriteLine("Pattern file does not exist at '{0}'", fn);
-                return;
             }
-            Console.WriteLine("Reading patterns");
-            using(StreamReader bin = new StreamReader(new FileStream(fn, FileMode.Open, FileAccess.Read, FileShare.Read)))
+            else
             {
-                string line = bin.ReadLine();
-                int startidx = line.IndexOf(Grouping) + 1;
-                string pattern = line.Substring(startidx, line.IndexOf(Grouping, startidx) - startidx);
-                startidx = line.IndexOf(Grouping, startidx + pattern.Length + 2, Grouping) + 1;
-                string replace = line.Substring(startidx, line.IndexOf(Grouping, startidx + 1) - startidx);
-                if(!m_Replacements.Contains(replace))
-                    m_Replacements.Add(replace);
-                action(m_Replacements.IndexOf(replace), pattern);
+                Console.WriteLine("Reading patterns");
+                using(StreamReader bin = new StreamReader(new FileStream(fn, FileMode.Open, FileAccess.Read, FileShare.Read)))
+                {
+                    string line;
+                    Encoding enc = GetEncoding(bin.BaseStream);
+                    while(!string.IsNullOrEmpty(line = bin.ReadLine()))
+                    {
+                        int startidx = line.IndexOf(Grouping) + 1;
+                        string pattern = line.Substring(startidx, line.IndexOf(Grouping, startidx) - startidx);
+                        startidx = line.IndexOf(Grouping, startidx + pattern.Length + 2) + 1;
+                        string replace = line.Substring(startidx, line.IndexOf(Grouping, startidx + 1) - startidx);
+                        if(!m_Replacements.Contains(replace))
+                            m_Replacements.Add(replace);
+                        yield return new Tuple<byte[], int>(enc.GetBytes(pattern), m_Replacements.IndexOf(replace));
+                    }
+                }
             }
         }
 
 
-        public static Task[] StartSearch()
+        /// <summary>
+        /// Uses the <see cref="Trie"/> to search through all the files requested in <see cref="MainClass.Work"/>
+        /// </summary>
+        /// <returns>A list of tasks that should be waited on</returns>
+        public static IEnumerable<Task> StartSearch()
         {
             return new Task[]
             {
@@ -155,7 +171,7 @@ namespace MultiGrep
                     ConcurrentBag<Task> list = new ConcurrentBag<Task>();
                     while(!Replacer.IsCompleted)
                     {
-                        Tuple<string, List<Translation>> file;
+                        Tuple<string, List<Bookmark>> file;
                         if(Replacer.TryTake(out file))
                             list.Add(WriteAwait(file.Item1, file.Item2));
                     }
@@ -167,27 +183,33 @@ namespace MultiGrep
         /// <summary>
         /// An async file writer.  It replaces patterns with their respective matches
         /// </summary>
-        /// <param name="file"></param>
-        /// <param name="work"></param>
+        /// <param name="file">The file to replace patterns in</param>
+        /// <param name="work">A list of <see cref="Bookmark"/> detailing where to replace patterns</param>
         /// <returns></returns>
-        private static async Task WriteAwait(string file, List<Translation> work)
+        private static async Task WriteAwait(string file, List<Bookmark> work)
         {
             await Task.Run(() =>
             {
                 Interlocked.Increment(ref MainClass.Active);
 
-                string atmp = file.Remove(0, file.IndexOf(Path.DirectorySeparatorChar) + 1);
-                atmp = Path.GetDirectoryName(atmp.Replace(m_Path, ""));
-                Directory.CreateDirectory(Path.Combine(Temp, atmp));
-                string tmp = Path.Combine(Temp, atmp, Path.ChangeExtension(Path.GetFileName(file), ".tmp"));
+                string tmp = Path.GetTempFileName();
+                if(Backup)
+                {
+                    string back = file + ".bak";
+                    int c = 1;
+                    while(File.Exists(back))
+                        back = Path.ChangeExtension(back, ".bak" + c++);
+                    File.Copy(file, back);
+                }
 
                 byte[] buffer = new byte[2056];
                 long current = 2056;
-                work.Sort(new TranslationComparer());
+                work.Sort((a,b)=>a.Start.CompareTo(b.Start));
                 using(FileStream writer = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.Write))
                 {
                     using(FileStream reader = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
                     {
+                        Encoding enc = GetEncoding(reader);
                         bool nxt = false;
                         work.ForEach(loc =>
                         {
@@ -218,27 +240,9 @@ namespace MultiGrep
                                 }
                             }
                             writer.Write(buffer, 0, length);
-                            writer.Write(LocalConst, 0, LocalConst.Length);
 
-
-                            int id = loc.Id;
-                            int i = 0;
-                            int div = id;
-                            while(div > 9) //Convert the id into digits in the localization
-                            {
-                                buffer[10 - i] = (byte)((div % 10 + 48) & 0xFF);
-                                div /= 10;
-                                ++i;
-                            }
-                            buffer[10 - i] = (byte)((div + 48) & 0xFF); //Convert the final digit
-                            writer.Write(buffer, 10 - i, i + 1); //Write the id.
-                            reader.Position = loc.Start + loc.Length + 1; //Skip the the end of this line.
-                            length = (int)(loc.End - reader.Position); //Get the length of the remaining arguments.
-                            reader.Read(buffer, 0, length); //Read the arguments
-                            writer.Write(buffer, 0, length); //Write the arguments.
-                            //writer.Write(Comment, 0, Comment.Length); //Add a comment
-                            byte[] local = Encoding.Default.GetBytes(Tree.FindId(loc.Id));
-                            writer.Write(local, 0, local.Length);
+                            string replace = m_Replacements[loc.Id];
+                            writer.Write(enc.GetBytes(replace), 0, replace.Length);
                             nxt = true;
                         });
                         int pos;
@@ -249,6 +253,10 @@ namespace MultiGrep
                         }
                     }
                 }
+                string tmp2 = Path.GetTempFileName() + Task.CurrentId;
+                File.Move(file, tmp2);
+                File.Move(tmp, file);
+                File.Delete(tmp2);
                 MainClass.Writes.Add(file);
                 Interlocked.Decrement(ref MainClass.Active);
             }, MainClass.Token).ConfigureAwait(false);
@@ -260,38 +268,15 @@ namespace MultiGrep
             {
                 Interlocked.Increment(ref MainClass.Active);
                 List<Bookmark> list = ParseFile(fn);
-                List<Translation> result = await FilterResults(fn, list).ConfigureAwait(false);
-                if(result.Count > 0)
-                {
-                    Replacer.Add(new Tuple<string, List<Translation>>(fn, result));
-                    MainClass.Log.Add(result.Aggregate("",
-                                                       (a, b) => (string.IsNullOrEmpty(a) ? "" : a + Environment.NewLine) +
-                                                                 $"{fn}:  {b.Id} <- '{list.Find(r => r.Start == b.Start).Text}'"));
-                }
-                Interlocked.Decrement(ref MainClass.Active);
-            }, MainClass.Token).ConfigureAwait(false);
-        }
-
-        public static async Task<List<Translation>> FilterResults(string fn, List<Bookmark> list)
-        {
-            return await Task.Run(async () =>
-            {
-                List<Translation> result = new List<Translation>();
+                //List<Translation> result = await FilterResults(fn, list).ConfigureAwait(false);
                 if(list.Count > 0)
                 {
-                    Interlocked.Increment(ref MainClass.Active);//Increment the number of active tasks
-                    foreach(Bookmark t in list)
-                    {
-                        int res;
-                        if((res = await Match(t.Text).ConfigureAwait(false)) != 0)
-                        {
-                            result.Add(t.Convert(res));
-                            Interlocked.Increment(ref MainClass.Found);//Increment the number of matching patterns found
-                        }
-                    }
-                    Interlocked.Decrement(ref MainClass.Active);//Decrement the number of active tasks
+                    Replacer.Add(new Tuple<string, List<Bookmark>>(fn, list));
+                    MainClass.Log.Add(list.Aggregate("",
+                                                       (a, b) => (string.IsNullOrEmpty(a) ? "" : a + Environment.NewLine) +
+                                                                 $"{fn}:  {m_Replacements[b.Id]} <- '{list.Find(r => r.Start == b.Start).Text}'"));
                 }
-                return result;
+                Interlocked.Decrement(ref MainClass.Active);
             }, MainClass.Token).ConfigureAwait(false);
         }
 
@@ -302,10 +287,10 @@ namespace MultiGrep
         /// </summary>
         /// <param name="file">The text file to analyze.</param>
         /// <returns>The detected encoding.</returns>
-        public static Encoding GetEncoding(FileStream file)
+        private static Encoding GetEncoding(Stream file)
         {
             // Read the BOM
-            var bom = new byte[4];
+            byte[] bom = new byte[4];
             file.Read(bom, 0, 4);
 
 
@@ -337,7 +322,6 @@ namespace MultiGrep
 
         private static List<Bookmark> ParseFile(string fn)
         {
-            // List<Tuple<long, int, string>> list = new List<Tuple<long, int, string>>();
             List<Bookmark> list = new List<Bookmark>();
             using (FileStream reader = new FileStream(fn, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
@@ -345,7 +329,7 @@ namespace MultiGrep
                 int count = 0;
                 int c;
                 long start = 0;
-                Trie ele = Tree.Root;
+                Node ele = Tree.Root;
                 byte[] bbuff = new byte[2056];
                 while((c = reader.ReadByte()) != -1)
                 {
@@ -356,8 +340,8 @@ namespace MultiGrep
                     }
                     else if(ele.Terminal)
                     {
-                        bbuff[count] = (byte)c;
-                        list.Add(new Bookmark(start, count, enc.GetString(bbuff, 0, count)));
+                        bbuff[count++] = (byte)c;
+                        list.Add(new Bookmark(start, count, enc.GetString(bbuff, 0, count), ele.Value));
                         ele = Tree.Root;
                         count = 0;
                     }
@@ -376,31 +360,6 @@ namespace MultiGrep
                 }
             }
             return list;
-        }
-
-        private static async Task<int> Match(string line) { return await Task.Run(() => Tree.GetLocalization(line)).ConfigureAwait(false); }
-
-        public sealed class TranslationComparer : IComparer<Translation>
-        {
-            #region Implementation of IComparer<in Tuple<long,int,int>>
-
-            /// <summary>
-            ///     Compares two objects and returns a value indicating whether one is less than, equal to, or greater than the other.
-            /// </summary>
-            /// <returns>
-            ///     A signed integer that indicates the relative values of <paramref name="x" /> and <paramref name="y" />, as shown in
-            ///     the following table.Value Meaning Less than zero<paramref name="x" /> is less than <paramref name="y" />.Zero
-            ///     <paramref name="x" /> equals <paramref name="y" />.Greater than zero<paramref name="x" /> is greater than
-            ///     <paramref name="y" />.
-            /// </returns>
-            /// <param name="x">The first object to compare.</param>
-            /// <param name="y">The second object to compare.</param>
-            public int Compare(Translation x, Translation y)
-            {
-                return (int)(x.Start - y.Start);
-            }
-
-            #endregion
         }
     }
 }

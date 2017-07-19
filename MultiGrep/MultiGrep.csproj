@@ -45,27 +45,22 @@
   <ItemGroup>
     <Compile Include="Bookmark.cs" />
     <Compile Include="MultiByteSR.cs" />
-    <Compile Include="Trie.cs" />
-    <Compile Include="MultiSR.cs" />
+    <Compile Include="Node.cs" />
     <Compile Include="CLList.cs" />
     <Compile Include="EditDistance.cs" />
-    <Compile Include="Element.cs" />
     <Compile Include="Exceptions.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="ByteTree.cs" />
-    <Compile Include="SuffixTree.cs" />
-    <Compile Include="Syntax.cs" />
+    <Compile Include="Trie.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="TestData\Patterns.txt" />
+    <Content Include="TestData\Search\test.txt" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="TestData\Search\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

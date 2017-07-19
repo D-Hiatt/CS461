@@ -32,41 +32,23 @@ namespace MultiGrep
         public long End { get; set; }
         public int Length { get; }
         public string Text { get; }
+        public int Id { get; }
 
-        public Bookmark(long s, int length, int size, char[] text)
+        public Bookmark(long s, int length, int size, char[] text, int id)
         {
             Start = s;
             End = s + length;
             Length = length;
             Text = new string(text, 0, size);
+            Id = id;
         }
 
-        public Bookmark(long s, int length, string text)
+        public Bookmark(long s, int length, string text, int id)
         {
             Start = s;
             End = s + length;
             Length = length;
             Text = text;
-        }
-
-        public Translation Convert(int id) { return new Translation(this, id); }
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    public struct Translation
-    {
-        public long Start { get; }
-        public long End { get; }
-        public int Length { get; }
-        public int Id { get; }
-
-        public Translation(Bookmark mark, int id)
-        {
-            Start = mark.Start;
-            End = mark.End;
-            Length = mark.Length;
             Id = id;
         }
     }
