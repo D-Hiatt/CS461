@@ -54,12 +54,11 @@ namespace MultiGrep
         public char[] LastBytes { get; }
         public bool Found { get; }
         public bool Block { get; }
-        public CLList History { get; }
 
-        public ParseException(string msg, long pos = 0, bool found = false, bool block = false, char[] last = null, int length = 0,
-                              CLList list = null) : base(msg)
+        public ParseException(string msg, long pos = 0, bool found = false, bool block = false, char[] last = null, int length = 0) : base(msg)
         {
             Position = pos;
+
             Found = found;
             Block = block;
             if(last != null)
@@ -71,7 +70,6 @@ namespace MultiGrep
             {
                 LastBytes = new char[] {'0'};
             }
-            History = list;
         }
     }
 }

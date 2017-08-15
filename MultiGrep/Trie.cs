@@ -30,6 +30,9 @@ namespace MultiGrep
 {
     public class Trie
     {
+        private static readonly byte m_OpenBracket = 0x5B;
+        private static readonly byte m_CloseBracket = 0x5D;
+        private static readonly byte m_Dash = 0x2D;
         public Node Root { get; }
 
         /// <summary>
@@ -42,28 +45,33 @@ namespace MultiGrep
             Root = new Node();
             reader.ForEach(kv =>
             {
-                Node current = Root;
+                BaseNode current = Root;
                 int val = kv.Value.First();
+                foreach(byte b in kv.Key)
+                {
+                    
+                }
                 kv.Key.ForEach(b=> current.Add(b, val, out current));   //Build the branch using each byte as a node
                 current?.End(val);      //Mark the final node as a terminal
             });
             Node.Loaded = true;
         }
 
-        public Trie(IEnumerable<Tuple<byte[], int>> tuples)
+        public Trie(IEnumerable<Tuple<byte[], int>> tuples, bool regex = false)
         {
             Root = new Node();
-            Console.WriteLine("Building new tree from {0} words.", tuples.Count());
-            tuples.ForEach(t =>
+            Tuple<byte[], int>[] enumerable = tuples as Tuple<byte[], int>[] ?? tuples.ToArray();
+            Console.WriteLine("Building new tree from {0} words.", enumerable.Length);
+            enumerable.ForEach(t =>
             {
-                Node current = Root;
+                BaseNode current = Root;
                 t.Item1.ForEach(b=>current.Add(b, t.Item2, out current));
                 current?.End(t.Item2);
             });
             Node.Loaded = true;
         }
 
-        public Trie(BinaryReader reader)
+  /*      public Trie(BinaryReader reader)
         {
             Console.WriteLine("Loading Tree");
             switch(reader.ReadInt32()) //version
@@ -86,6 +94,6 @@ namespace MultiGrep
                 writer.Write(1); //version
                 Root.Save(writer);
             }
-        }
+        }*/
     }
 }

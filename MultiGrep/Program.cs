@@ -20,6 +20,8 @@ namespace MultiGrep
         public static long Active;
         public static long Found;
 
+        public static bool Regex { get; private set; }
+
         private static readonly CancellationTokenSource Source = new CancellationTokenSource();
         private static readonly ManualResetEvent Toggle = new ManualResetEvent(false);
 
@@ -78,6 +80,8 @@ namespace MultiGrep
                     case "-g":
                         MultiByteSR.Grouping = s[2];
                         break;
+                    case "-e": Regex = true;
+                        break;
                     default:
                         if(Directory.Exists(s))
                             Directory.GetFiles(s).ForEach(work.Enqueue);
@@ -105,8 +109,10 @@ namespace MultiGrep
                             while(Log.TryTake(out data))
                                 writer.Write(data);
                         }
-                        Process proc = Process.Start("notepad.exe", LogPath);
-                        proc.WaitForExit();
+                        using(Process proc = Process.Start("notepad.exe", LogPath))
+                        {
+                            proc.WaitForExit();
+                        }
                     }
                     else
                     {

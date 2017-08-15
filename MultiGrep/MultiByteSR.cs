@@ -77,19 +77,19 @@ namespace MultiGrep
                 if(!File.Exists(fn))    //Pattern file does not exist
                     return false;
             }
-            if(fn == TreeSave || fn.EndsWith(".bin", StringComparison.OrdinalIgnoreCase))
+   /*         if(fn == TreeSave || fn.EndsWith(".bin", StringComparison.OrdinalIgnoreCase))
             {
                 //Load the tree from a saved file
                 Tree = new Trie(new BinaryReader(new FileStream(fn, FileMode.Open, FileAccess.Read, FileShare.Read)));
             }
-            else
+            else*/
             {
               //  ConcurrentDictionary<string, HashSet<int>> dict1 = new ConcurrentDictionary<string, HashSet<int>>();
                 //Otherwise build a new suffix tree
               //  ;
                // HashSet<int> del;
                // dict1.TryRemove("", out del);//Remove any blank strings
-                Tree = new Trie(ReadData(fn));
+                Tree = new Trie(ReadData(fn), MainClass.Regex);
             }
             return Tree != null;
         }
@@ -105,11 +105,11 @@ namespace MultiGrep
         /// Saves the <see cref="Trie"/>.  Useful when loading large pattern files, to avoid rebuilding the tree each time.
         /// </summary>
         /// <param name="fn"></param>
-        public static void Save(string fn)
+  /*      public static void Save(string fn)
         {
             if(!string.IsNullOrEmpty(fn))
                 Tree?.Save(fn);
-        }
+        }*/
 
         /// <summary>
         /// Read the list of patterns and replacement patterns
@@ -329,7 +329,7 @@ namespace MultiGrep
                 int count = 0;
                 int c;
                 long start = 0;
-                Node ele = Tree.Root;
+                BaseNode ele = Tree.Root;
                 byte[] bbuff = new byte[2056];
                 while((c = reader.ReadByte()) != -1)
                 {
